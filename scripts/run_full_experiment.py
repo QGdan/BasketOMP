@@ -60,19 +60,28 @@ def run_command(cmd: str | list, description: str = "", check: bool = True) -> s
         display = cmd
     print(f"  ▶ {description or display}")
     start = time.perf_counter()
-    result = subprocess.run(
-        cmd, shell=isinstance(cmd, str), check=False, text=True,
-        capture_output=True,
-    )
-    elapsed = time.perf_counter() - start
-    if check and result.returncode != 0:
-        print(f"  ✗ 失败 ({elapsed:.1f}s)")
-        if result.stderr:
-            print(f"    {result.stderr[:500]}")
-        raise subprocess.CalledProcessError(result.returncode, display,
-                                            result.stdout, result.stderr)
-    print(f"  ✓ 完成 ({elapsed:.1f}s)")
-    return result
+    try:
+        result = subprocess.run(
+            cmd, shell=isinstance(cmd, str), check=False, text=True,
+            capture_output=True,
+        )
+        elapsed = time.perf_counter() - start
+        if check and result.returncode != 0:
+            print(f"  ✗ 失败 ({elapsed:.1f}s)")
+            if result.stderr:
+                print(f"    stderr: {result.stderr[:1000]}")
+            if result.stdout:
+                print(f"    stdout: {result.stdout[:500]}")
+            raise subprocess.CalledProcessError(result.returncode, display,
+                                                result.stdout, result.stderr)
+        print(f"  ✓ 完成 ({elapsed:.1f}s)")
+        return result
+    except subprocess.CalledProcessError:
+        raise
+    except Exception as exc:
+        elapsed = time.perf_counter() - start
+        print(f"  ✗ 异常 ({elapsed:.1f}s): {exc}")
+        raise
 
 
 def main() -> int:

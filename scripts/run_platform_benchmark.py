@@ -167,7 +167,10 @@ def run_program(args: argparse.Namespace, mode: str, threads: int,
     elapsed_ms = (time.perf_counter() - started) * 1000.0
     if completed.returncode != 0:
         raise RuntimeError(
-            f"基准测试失败 ({mode}, {threads} 线程):\n{completed.stderr}"
+            f"基准测试失败 ({mode}, {threads} 线程)\n"
+            f"命令: {' '.join(command)}\n"
+            f"stderr: {completed.stderr[:2000]}\n"
+            f"stdout: {completed.stdout[:500]}"
         )
     return parse_key_values(completed.stdout), elapsed_ms
 
@@ -255,12 +258,12 @@ def run_single_experiment(args: argparse.Namespace) -> Path:
         if args.executable.name.endswith(".exe") and alternative.exists():
             args.executable = alternative
         else:
-            # 尝试无后缀
             alt_noext = Path(str(args.executable).replace(".exe", ""))
             if alt_noext.exists():
                 args.executable = alt_noext
             else:
                 raise FileNotFoundError(f"可执行文件未找到: {args.executable}")
+    print(f"  可执行文件: {args.executable} (存在: {args.executable.exists()})")
 
     # ── 实验目录 ──────────────────────────
     profile = ("fast-normalization-full" if args.max_neighbors == 0
@@ -532,7 +535,7 @@ def main() -> int:
 
     # ── 实验参数 ──────────────────────────
     parser.add_argument("--executable", type=Path,
-                        default=Path("build/basket_recommender.exe"))
+                        default=Path("build/basket_recommender"))
     parser.add_argument("--data", type=Path, default=Path("data/medium"))
     parser.add_argument("--dataset", default="medium")
     parser.add_argument("--threads", default="auto",
