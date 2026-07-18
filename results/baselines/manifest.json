@@ -1,0 +1,19 @@
+{
+  "baseline_id": "baseline-20260716-pre-optimization",
+  "registered_on": "2026-07-17",
+  "algorithm_profile": "baseline-full",
+  "default_top_k": 10,
+  "default_cooccur_schedule": "dynamic",
+  "default_cooccur_chunk": 64,
+  "default_recommend_schedule": "dynamic",
+  "default_recommend_chunk": 16,
+  "max_neighbors": 0,
+  "correctness_rechecked": true,
+  "medium_raw": "../../raw/runtime-medium-20260716-125503.csv",
+  "medium_summary": "../../summary/runtime-medium-20260716-125503-summary.csv",
+  "large_raw": "../../raw/runtime-large-20260716-smoke.csv",
+  "large_summary": "../../summary/runtime-large-20260716-smoke-summary.csv",
+  "medium_recommendation_checksum": "17408454852844037599",
+  "large_recommendation_checksum": "3338591281313901940",
+  "notes": "This manifest registers the accepted pre-optimization results without copying or modifying the original CSV files."
+}
