@@ -1,3 +1,0 @@
-﻿"dataset","version","threads","schedule","run","load_ms","cooccur_compute_ms","merge_ms","adjacency_ms","recommend_ms","algorithm_ms","end_to_end_ms","hit_rate_at_10","recall_at_10","cooccur_checksum","recommendation_checksum"
-"medium","serial","1","none","1","376","319","0","339","7081","7739","8115","0.8428125","0.31472267698","14472467716660838659","17408454852844037599"
-"medium","openmp","8","static","1","380","66","170","388","1065","1689","2074","0.8428125","0.31472267698","14472467716660838659","17408454852844037599"

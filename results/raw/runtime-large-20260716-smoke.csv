@@ -1,3 +1,0 @@
-dataset,version,threads,schedule,run,load_ms,cooccur_compute_ms,merge_ms,adjacency_ms,recommend_ms,algorithm_ms,end_to_end_ms,hit_rate_at_10,recall_at_10,cooccur_checksum,recommendation_checksum
-large,serial,1,none,1,16933,14480,0,6865,1196608,1217953,1234896,0.843189110503,0.306467486678,13699575145743775109,3338591281313901940
-large,openmp,8,dynamic,1,18187,3521,4407,7110,184111,199149,217511,0.843189110503,0.306467486678,13699575145743775109,3338591281313901940
