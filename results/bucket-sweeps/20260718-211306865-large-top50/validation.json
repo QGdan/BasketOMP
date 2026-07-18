@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-07-18T22:05:15.264464+08:00",
+  "status": "pass",
+  "row_count": 25,
+  "configurations": 25,
+  "checks": [
+    "cooccur_checksum",
+    "recommendation_checksum",
+    "graph_edge_entries",
+    "max_degree",
+    "hit_rate",
+    "precision",
+    "recall",
+    "f1",
+    "ndcg",
+    "mrr",
+    "micro_precision",
+    "micro_recall"
+  ],
+  "errors": []
+}

@@ -1,0 +1,75 @@
+{
+  "schema_version": 2,
+  "run_id": "20260718-211306865",
+  "created_at": "2026-07-18T22:05:15.302734+08:00",
+  "dataset": "large",
+  "threads": [
+    8,
+    16,
+    24,
+    32,
+    48
+  ],
+  "buckets": [
+    1,
+    64,
+    128,
+    256,
+    384
+  ],
+  "bucket_baseline": 1,
+  "parameters": {
+    "executable": "build/basket_recommender",
+    "data": "data/large",
+    "dataset": "large",
+    "threads": "8,16,24,32,48",
+    "max_threads": 48,
+    "buckets": "1,64,128,256,384",
+    "baseline_buckets": 1,
+    "repeats": 3,
+    "serial_repeats": 2,
+    "warmups": 1,
+    "top_k": 10,
+    "max_neighbors": 50,
+    "cooccur_schedule": "dynamic",
+    "cooccur_chunk": 64,
+    "recommend_schedule": "dynamic",
+    "recommend_chunk": 16,
+    "proc_bind": "spread",
+    "places": "cores",
+    "seed": 20260718,
+    "ordered": false,
+    "correctness": false,
+    "no_plot": false,
+    "build_command": "make release",
+    "output_root": "results/bucket-sweeps"
+  },
+  "experiments": [
+    {
+      "merge_buckets": 1,
+      "directory": "/home/zkpk/bingxing/BasketOMP-main/results/bucket-sweeps/20260718-211306865-large-top50/experiments/20260718-211306917-large-fast-normalization-top50-mb1"
+    },
+    {
+      "merge_buckets": 64,
+      "directory": "/home/zkpk/bingxing/BasketOMP-main/results/bucket-sweeps/20260718-211306865-large-top50/experiments/20260718-212500335-large-fast-normalization-top50-mb64"
+    },
+    {
+      "merge_buckets": 128,
+      "directory": "/home/zkpk/bingxing/BasketOMP-main/results/bucket-sweeps/20260718-211306865-large-top50/experiments/20260718-213451847-large-fast-normalization-top50-mb128"
+    },
+    {
+      "merge_buckets": 256,
+      "directory": "/home/zkpk/bingxing/BasketOMP-main/results/bucket-sweeps/20260718-211306865-large-top50/experiments/20260718-214451118-large-fast-normalization-top50-mb256"
+    },
+    {
+      "merge_buckets": 384,
+      "directory": "/home/zkpk/bingxing/BasketOMP-main/results/bucket-sweeps/20260718-211306865-large-top50/experiments/20260718-215457945-large-fast-normalization-top50-mb384"
+    }
+  ],
+  "files": {
+    "comparison": "/home/zkpk/bingxing/BasketOMP-main/results/bucket-sweeps/20260718-211306865-large-top50/bucket-comparison.csv",
+    "validation": "/home/zkpk/bingxing/BasketOMP-main/results/bucket-sweeps/20260718-211306865-large-top50/validation.json",
+    "report": "/home/zkpk/bingxing/BasketOMP-main/results/bucket-sweeps/20260718-211306865-large-top50/bucket-report.md",
+    "figures": "/home/zkpk/bingxing/BasketOMP-main/results/bucket-sweeps/20260718-211306865-large-top50/figures"
+  }
+}
