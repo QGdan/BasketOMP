@@ -1,0 +1,7 @@
+order_id,product_id,add_to_cart_order,reordered
+10,1,1,0
+10,2,2,0
+10,3,3,0
+11,1,1,1
+11,2,2,1
+12,2,1,0

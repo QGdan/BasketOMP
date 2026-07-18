@@ -1,0 +1,5 @@
+product_id,product_name,aisle_id,department_id
+1,Apple,1,1
+2,Banana,1,1
+3,Milk,2,2
+4,Bread,3,2
