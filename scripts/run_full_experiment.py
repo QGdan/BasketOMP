@@ -183,9 +183,11 @@ def main() -> int:
     ]
 
     if args.quick:
-        experiments = [e for e in experiments if not e[3] and e[0] != "large"]
-        # quick 模式下也跳过 small full 和 medium full
-        experiments = [e for e in experiments if e[3] or e[2] == "medium-full"]
+        # quick 模式: 只跑 small+medium Top-50，跳过 Full 图和 large
+        experiments = [
+            ("small",   50, "small-top50",   False),
+            ("medium",  50, "medium-top50",  False),
+        ]
 
     output_root = project_root / args.output_root
     output_root.mkdir(parents=True, exist_ok=True)

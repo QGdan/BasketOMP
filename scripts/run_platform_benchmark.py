@@ -387,31 +387,39 @@ def run_correctness_gate(args: argparse.Namespace) -> bool:
     project_root = script_dir.parent
     build_dir = project_root / "build"
 
+    # 平台适配：Linux 上可执行文件无 .exe 后缀
+    def _find_exe(base_name):
+        candidates = [base_name, base_name.replace('.exe', '').replace('.out', ''),
+                      base_name + '.exe', base_name + '.out']
+        for name in candidates:
+            p = build_dir / name
+            if p.exists() and p.is_file():
+                return p
+        return None
+
     tests = [
-        ("test_loader.exe", [str(args.data)]),
-        ("test_pair_hash.exe", []),
-        ("test_cooccurrence.exe", [str(args.data)]),
-        ("test_recommender.exe", [str(args.data)]),
-        ("test_evaluator.exe", []),
-        ("test_integration.exe", [str(args.data)]),
+        ("test_loader", [str(args.data)]),
+        ("test_pair_hash", []),
+        ("test_cooccurrence", [str(args.data)]),
+        ("test_recommender", [str(args.data)]),
+        ("test_evaluator", []),
+        ("test_integration", [str(args.data)]),
     ]
 
     all_passed = build_ok
     for exe_name, exe_args in tests:
-        exe_path = build_dir / exe_name
-        # 尝试无后缀版
-        if not exe_path.exists():
-            exe_path = build_dir / exe_name.replace(".exe", "")
-        if not exe_path.exists():
+        exe_path = _find_exe(exe_name)
+        if exe_path is None:
             print(f"  ⚠ 跳过 {exe_name}（未找到可执行文件）")
             continue
         result = subprocess.run(
             [str(exe_path)] + exe_args, capture_output=True, text=True
         )
+        display_name = exe_path.name
         if result.returncode == 0 and "PASS" in result.stdout:
-            print(f"  ✓ {exe_name}")
+            print(f"  ✓ {display_name}")
         else:
-            print(f"  ✗ {exe_name} 失败")
+            print(f"  ✗ {display_name} 失败")
             if result.stderr:
                 print(f"    {result.stderr[:200]}")
             all_passed = False
