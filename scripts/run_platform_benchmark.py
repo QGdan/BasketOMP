@@ -360,8 +360,10 @@ def run_single_experiment(args: argparse.Namespace) -> Path:
     # 图表
     if not args.no_plot:
         print("  绘图...")
-        subprocess.run([python, str(script_dir / "plot_results.py"),
-                        str(summary), str(target / "figures")], check=True)
+        result = subprocess.run([python, str(script_dir / "plot_results.py"),
+                        str(summary), str(target / "figures")], check=False)
+        if result.returncode != 0:
+            print(f"  ⚠ 绘图失败（可手动重试）: pip install matplotlib && python scripts/plot_results.py {summary} {target / 'figures'}")
 
     # 更新索引
     update_experiment_index(args.output_root, target, {
