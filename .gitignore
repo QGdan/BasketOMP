@@ -1,0 +1,45 @@
+# ── 构建产物 ──────────────────────────────────
+build/*.exe
+build/*.out
+build/*.o
+
+# ── 实验结果 (可提交但默认不纳入版本管理) ──────
+results/experiments/
+results/platform-experiments/
+results/raw/
+results/summary/
+results/baselines/
+results/figures/
+results/__pycache__/
+
+# ── Python 缓存 ───────────────────────────────
+__pycache__/
+scripts/__pycache__/
+*.py[cod]
+
+# ── 文档生成临时文件 ─────────────────────────
+docs/_parsed/
+docs/_tmp_render/
+docs/_tmp_render_escalated/
+docs/_rendered_project_description_v1/
+
+# ── IDE 和编辑器 ─────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-*
+
+# ── OS 文件 ──────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ── 压缩包和大文件 (走 LFS) ─────────────────
+*.zip
+project.zip
+
+# ── 临时文件 ─────────────────────────────────
+*.tmp
+*.temp
