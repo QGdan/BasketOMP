@@ -18,6 +18,24 @@ static uint64_t mix64(uint64_t value)
     return value;
 }
 
+size_t pair_map_bucket_index(uint64_t key, size_t bucket_count)
+{
+    uint64_t bucket_hash;
+    if (bucket_count == 0) {
+        return 0;
+    }
+    /*
+     * Use the high mixed bits for bucket routing. Hash-table probing uses the
+     * low bits, so this separation prevents every key in one bucket from
+     * starting at the same small subset of slots.
+     */
+    bucket_hash = mix64(key) >> 32;
+    if ((bucket_count & (bucket_count - 1)) == 0) {
+        return (size_t)(bucket_hash & (uint64_t)(bucket_count - 1));
+    }
+    return (size_t)(bucket_hash % (uint64_t)bucket_count);
+}
+
 uint64_t encode_pair(uint32_t product_a, uint32_t product_b)
 {
     uint32_t lower = product_a < product_b ? product_a : product_b;
@@ -72,14 +90,67 @@ void pair_map_free(PairHashMap *map)
         return;
     }
     free(map->entries);
+    free(map->bucket_offsets);
     memset(map, 0, sizeof(*map));
 }
 
-static size_t find_slot(const PairEntry *entries, size_t capacity,
-                        uint64_t key, int *found)
+int pair_map_init_partitioned(PairHashMap *map,
+                              const size_t *bucket_expected_sizes,
+                              size_t bucket_count)
 {
-    size_t index = (size_t)(mix64(key) & (uint64_t)(capacity - 1));
-    for (;;) {
+    size_t total_capacity = 0;
+    if (map == NULL || bucket_expected_sizes == NULL || bucket_count == 0 ||
+        bucket_count > SIZE_MAX / sizeof(*map->bucket_offsets) - 1) {
+        return -1;
+    }
+    memset(map, 0, sizeof(*map));
+    map->bucket_offsets = calloc(bucket_count + 1,
+                                 sizeof(*map->bucket_offsets));
+    if (map->bucket_offsets == NULL) {
+        return -1;
+    }
+    for (size_t bucket = 0; bucket < bucket_count; ++bucket) {
+        size_t expected = bucket_expected_sizes[bucket];
+        size_t required_slots;
+        size_t bucket_capacity;
+        if (expected > (SIZE_MAX - (PAIR_MAP_LOAD_NUMERATOR - 1)) /
+                       PAIR_MAP_LOAD_DENOMINATOR) {
+            pair_map_free(map);
+            return -1;
+        }
+        required_slots = (expected * PAIR_MAP_LOAD_DENOMINATOR +
+                          PAIR_MAP_LOAD_NUMERATOR - 1) /
+                         PAIR_MAP_LOAD_NUMERATOR;
+        bucket_capacity = next_power_of_two(required_slots);
+        if (bucket_capacity == 0 ||
+            SIZE_MAX - total_capacity < bucket_capacity) {
+            pair_map_free(map);
+            return -1;
+        }
+        map->bucket_offsets[bucket] = total_capacity;
+        total_capacity += bucket_capacity;
+    }
+    map->bucket_offsets[bucket_count] = total_capacity;
+    if (total_capacity > SIZE_MAX / sizeof(*map->entries)) {
+        pair_map_free(map);
+        return -1;
+    }
+    map->entries = calloc(total_capacity, sizeof(*map->entries));
+    if (map->entries == NULL) {
+        pair_map_free(map);
+        return -1;
+    }
+    map->capacity = total_capacity;
+    map->bucket_count = bucket_count;
+    return 0;
+}
+
+static size_t find_slot_range(const PairEntry *entries, size_t begin,
+                              size_t capacity, uint64_t key, int *found)
+{
+    size_t relative = (size_t)(mix64(key) & (uint64_t)(capacity - 1));
+    for (size_t probe = 0; probe < capacity; ++probe) {
+        size_t index = begin + relative;
         if (!entries[index].used) {
             *found = 0;
             return index;
@@ -88,15 +159,23 @@ static size_t find_slot(const PairEntry *entries, size_t capacity,
             *found = 1;
             return index;
         }
-        index = (index + 1) & (capacity - 1);
+        relative = (relative + 1) & (capacity - 1);
     }
+    *found = 0;
+    return SIZE_MAX;
+}
+
+static size_t find_slot(const PairEntry *entries, size_t capacity,
+                        uint64_t key, int *found)
+{
+    return find_slot_range(entries, 0, capacity, key, found);
 }
 
 static int pair_map_rehash(PairHashMap *map, size_t new_capacity)
 {
     PairEntry *new_entries;
     size_t i;
-    if (new_capacity < map->capacity ||
+    if (map->bucket_count != 0 || new_capacity < map->capacity ||
         new_capacity > SIZE_MAX / sizeof(*new_entries)) {
         return -1;
     }
@@ -109,6 +188,10 @@ static int pair_map_rehash(PairHashMap *map, size_t new_capacity)
             int found;
             size_t slot = find_slot(new_entries, new_capacity,
                                     map->entries[i].key, &found);
+            if (slot == SIZE_MAX) {
+                free(new_entries);
+                return -1;
+            }
             (void)found;
             new_entries[slot] = map->entries[i];
         }
@@ -123,7 +206,7 @@ int pair_map_reserve(PairHashMap *map, size_t expected_size)
 {
     size_t required_slots;
     size_t capacity;
-    if (map == NULL || map->entries == NULL) {
+    if (map == NULL || map->entries == NULL || map->bucket_count != 0) {
         return -1;
     }
     if (expected_size > (SIZE_MAX - (PAIR_MAP_LOAD_NUMERATOR - 1)) /
@@ -143,6 +226,39 @@ int pair_map_reserve(PairHashMap *map, size_t expected_size)
     return pair_map_rehash(map, capacity);
 }
 
+static int pair_map_increment_bucket(PairHashMap *map, size_t bucket,
+                                     uint64_t key, uint32_t delta,
+                                     int update_total_size,
+                                     size_t *inserted_entries)
+{
+    size_t begin = map->bucket_offsets[bucket];
+    size_t capacity = map->bucket_offsets[bucket + 1] - begin;
+    size_t slot;
+    int found;
+
+    slot = find_slot_range(map->entries, begin, capacity, key, &found);
+    if (slot == SIZE_MAX) {
+        return -1;
+    }
+    if (found) {
+        if (UINT32_MAX - map->entries[slot].count < delta) {
+            return -1;
+        }
+        map->entries[slot].count += delta;
+        return 0;
+    }
+    map->entries[slot].key = key;
+    map->entries[slot].count = delta;
+    map->entries[slot].used = 1;
+    if (update_total_size) {
+        ++map->size;
+    }
+    if (inserted_entries != NULL) {
+        ++*inserted_entries;
+    }
+    return 0;
+}
+
 int pair_map_increment(PairHashMap *map, uint64_t key, uint32_t delta)
 {
     size_t slot;
@@ -150,7 +266,14 @@ int pair_map_increment(PairHashMap *map, uint64_t key, uint32_t delta)
     if (map == NULL || map->entries == NULL || map->capacity == 0) {
         return -1;
     }
+    if (map->bucket_count != 0) {
+        size_t bucket = pair_map_bucket_index(key, map->bucket_count);
+        return pair_map_increment_bucket(map, bucket, key, delta, 1, NULL);
+    }
     slot = find_slot(map->entries, map->capacity, key, &found);
+    if (slot == SIZE_MAX) {
+        return -1;
+    }
     if (found) {
         if (UINT32_MAX - map->entries[slot].count < delta) {
             return -1;
@@ -159,7 +282,7 @@ int pair_map_increment(PairHashMap *map, uint64_t key, uint32_t delta)
         return 0;
     }
 
-    /* 插入新键前维持不超过 0.70 的负载因子，缩短线性探测链。 */
+    /* Keep the load factor below about 0.70 to shorten linear-probe chains. */
     if ((map->size + 1) * PAIR_MAP_LOAD_DENOMINATOR >=
         map->capacity * PAIR_MAP_LOAD_NUMERATOR) {
         if (map->capacity > SIZE_MAX / 2 ||
@@ -167,6 +290,9 @@ int pair_map_increment(PairHashMap *map, uint64_t key, uint32_t delta)
             return -1;
         }
         slot = find_slot(map->entries, map->capacity, key, &found);
+        if (slot == SIZE_MAX) {
+            return -1;
+        }
     }
     map->entries[slot].key = key;
     map->entries[slot].count = delta;
@@ -182,11 +308,18 @@ int pair_map_get(const PairHashMap *map, uint64_t key, uint32_t *count)
     if (map == NULL || map->entries == NULL || map->capacity == 0) {
         return 0;
     }
-    slot = find_slot(map->entries, map->capacity, key, &found);
-    if (found && count != NULL) {
+    if (map->bucket_count != 0) {
+        size_t bucket = pair_map_bucket_index(key, map->bucket_count);
+        size_t begin = map->bucket_offsets[bucket];
+        size_t capacity = map->bucket_offsets[bucket + 1] - begin;
+        slot = find_slot_range(map->entries, begin, capacity, key, &found);
+    } else {
+        slot = find_slot(map->entries, map->capacity, key, &found);
+    }
+    if (slot != SIZE_MAX && found && count != NULL) {
         *count = map->entries[slot].count;
     }
-    return found;
+    return slot != SIZE_MAX && found;
 }
 
 int pair_map_merge(PairHashMap *destination, const PairHashMap *source)
@@ -200,6 +333,34 @@ int pair_map_merge(PairHashMap *destination, const PairHashMap *source)
                                source->entries[i].count) != 0) {
             return -1;
         }
+    }
+    return 0;
+}
+
+int pair_map_merge_into_bucket(PairHashMap *destination, size_t bucket,
+                               const PairHashMap *source,
+                               size_t *inserted_entries)
+{
+    size_t inserted = 0;
+    if (destination == NULL || source == NULL ||
+        destination->bucket_count == 0 || bucket >= destination->bucket_count) {
+        return -1;
+    }
+    for (size_t i = 0; i < source->capacity; ++i) {
+        if (!source->entries[i].used) {
+            continue;
+        }
+        if (pair_map_bucket_index(source->entries[i].key,
+                                  destination->bucket_count) != bucket ||
+            pair_map_increment_bucket(destination, bucket,
+                                      source->entries[i].key,
+                                      source->entries[i].count,
+                                      0, &inserted) != 0) {
+            return -1;
+        }
+    }
+    if (inserted_entries != NULL) {
+        *inserted_entries += inserted;
     }
     return 0;
 }

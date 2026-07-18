@@ -1,4 +1,4 @@
-param(
+﻿param(
     [ValidateSet('small', 'medium', 'large')]
     [string]$Dataset = 'medium',
 
@@ -15,6 +15,8 @@ param(
     [ValidateSet('static', 'dynamic', 'guided')]
     [string]$CooccurSchedule = 'dynamic',
     [int]$CooccurChunk = 64,
+    [ValidateRange(0, 4096)]
+    [int]$MergeBuckets = 0,
     [ValidateSet('static', 'dynamic', 'guided')]
     [string]$RecommendSchedule = 'dynamic',
     [int]$RecommendChunk = 16,
@@ -76,6 +78,7 @@ function Invoke-Program([string]$Mode, [int]$Threads) {
                    '--max-neighbors', $MaxNeighbors,
                    '--cooccur-schedule', $CooccurSchedule,
                    '--cooccur-chunk', $CooccurChunk,
+                   '--merge-buckets', $MergeBuckets,
                    '--recommend-schedule', $RecommendSchedule,
                    '--recommend-chunk', $RecommendChunk)
     $output = & '.\build\basket_recommender.exe' @arguments
@@ -104,6 +107,8 @@ function New-BenchmarkRecord([string]$Mode, [int]$Threads, [int]$Repeat,
         schedule        = if ($Mode -eq 'serial') { 'none' } else { $CooccurSchedule }
         cooccur_schedule = if ($Mode -eq 'serial') { 'none' } else { $CooccurSchedule }
         cooccur_chunk   = $CooccurChunk
+        merge_strategy  = Get-RequiredValue $Value 'merge_strategy'
+        merge_buckets   = [uint32](Get-RequiredValue $Value 'merge_buckets')
         recommend_schedule = if ($Mode -eq 'serial') { 'none' } else { $RecommendSchedule }
         recommend_chunk = $RecommendChunk
         orders          = [uint64](Get-RequiredValue $Value 'orders')
@@ -149,7 +154,8 @@ function New-BenchmarkRecord([string]$Mode, [int]$Threads, [int]$Repeat,
 # ── 参数校验 ────────────────────────────
 if ($Repeats -lt 1 -or $SerialRepeats -lt 0 -or $Warmups -lt 0 -or
     $MaxThreads -lt 0 -or $TopK -lt 1 -or
-    $MaxNeighbors -lt 0 -or $CooccurChunk -lt 1 -or $RecommendChunk -lt 1) {
+    $MaxNeighbors -lt 0 -or $MergeBuckets -lt 0 -or
+    $CooccurChunk -lt 1 -or $RecommendChunk -lt 1) {
     throw 'Repeats/TopK/chunks 必须为正数；Warmups/MaxNeighbors 不可为负'
 }
 
@@ -235,6 +241,7 @@ try {
             -Repeats $Repeats -SerialRepeats $SerialRepeats -Warmups $Warmups `
             -ThreadCounts $ThreadCounts -TopK $TopK -MaxNeighbors $MaxNeighbors `
             -CooccurSchedule $CooccurSchedule -CooccurChunk $CooccurChunk `
+            -MergeBuckets $MergeBuckets `
             -RecommendSchedule $RecommendSchedule -RecommendChunk $RecommendChunk
 
         # ── 自动化后处理 ──────────────────

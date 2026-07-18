@@ -47,6 +47,7 @@ int main(int argc, char **argv)
     CooccurGraph parallel_graph = {0};
     int is_toy = strstr(path, "toy") != NULL;
     const int thread_counts[] = {1, 2, 4};
+    const int merge_bucket_counts[] = {0, 7, 64};
 
     CHECK(dataset_load(path, &dataset, error, sizeof(error)) == 0, error);
     CHECK(build_cooccur_serial(&dataset, &serial, error, sizeof(error)) == 0, error);
@@ -65,17 +66,22 @@ int main(int argc, char **argv)
     for (size_t t = 0; t < sizeof(thread_counts) / sizeof(thread_counts[0]); ++t) {
         for (int schedule = OMP_SCHEDULE_STATIC;
              schedule <= OMP_SCHEDULE_GUIDED; ++schedule) {
-            int repetitions = is_toy ? 20 : 2;
-            for (int repeat = 0; repeat < repetitions; ++repeat) {
-                CHECK(build_cooccur_openmp(&dataset, thread_counts[t],
-                      (OmpSchedule)schedule, 16, &parallel,
-                      error, sizeof(error)) == 0,
-                      error);
-                CHECK(cooccur_results_equal(&serial, &parallel),
-                      "serial/OpenMP cooccurrence mismatch");
-                CHECK(cooccur_result_checksum(&serial) ==
-                      cooccur_result_checksum(&parallel), "checksum mismatch");
-                cooccur_result_free(&parallel);
+            for (size_t b = 0;
+                 b < sizeof(merge_bucket_counts) / sizeof(merge_bucket_counts[0]);
+                 ++b) {
+                int repetitions = is_toy ? 5 : 1;
+                for (int repeat = 0; repeat < repetitions; ++repeat) {
+                    CHECK(build_cooccur_openmp(&dataset, thread_counts[t],
+                          (OmpSchedule)schedule, 16, merge_bucket_counts[b],
+                          &parallel, error, sizeof(error)) == 0, error);
+                    CHECK(cooccur_results_equal(&serial, &parallel),
+                          "serial/bucket-OpenMP cooccurrence mismatch");
+                    CHECK(cooccur_result_checksum(&serial) ==
+                          cooccur_result_checksum(&parallel), "checksum mismatch");
+                    CHECK(parallel.merge_bucket_count > 0,
+                          "parallel merge must report actual bucket count");
+                    cooccur_result_free(&parallel);
+                }
             }
         }
     }

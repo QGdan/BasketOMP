@@ -107,6 +107,30 @@ def main() -> int:
     plt.tight_layout()
     plt.savefig(output / f"{prefix}-stages.png", dpi=180)
     plt.close()
+    merge_share = [
+        100.0 * float(row["median_merge_ms"]) /
+        max(float(row["median_algorithm_ms"]), 1e-12)
+        for row in rows
+    ]
+    save_line(threads, merge_share, f"{title} merge share",
+              "Merge / algorithm time (%)",
+              output / f"{prefix}-merge-share.png")
+
+    plt.figure(figsize=(7, 4.5))
+    width = 0.38
+    left = [position - width / 2 for position in positions]
+    right = [position + width / 2 for position in positions]
+    plt.bar(left, cooccur, width=width, label="Pair generation")
+    plt.bar(right, merge, width=width, label="Bucket merge")
+    plt.xticks(positions, threads)
+    plt.xlabel("OpenMP threads")
+    plt.ylabel("Median runtime (ms)")
+    plt.title(f"{title} cooccurrence pipeline")
+    plt.grid(True, axis="y", alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(output / f"{prefix}-cooccur-pipeline.png", dpi=180)
+    plt.close()
     print(output)
     return 0
 

@@ -92,6 +92,30 @@ int main(void)
     CHECK(pair_map_checksum(&map) != checksum_before, "checksum changes with contents");
     pair_map_free(&other);
 
+    /* A non-power-of-two bucket count must support stable routing and lookup. */
+    {
+        size_t bucket_sizes[7] = {256, 256, 256, 256, 256, 256, 256};
+        size_t visited = 0;
+        CHECK(pair_map_init_partitioned(&other, bucket_sizes, 7) == 0,
+              "initialize partitioned map");
+        CHECK(other.bucket_count == 7, "partitioned bucket count");
+        for (uint32_t product = 1; product <= 300; ++product) {
+            CHECK(pair_map_increment(&other,
+                                     encode_pair(product, product + 1000), 1) == 0,
+                  "partitioned insertion");
+        }
+        CHECK(pair_map_increment(&other, encode_pair(7, 1007), 4) == 0,
+              "partitioned existing-key increment");
+        CHECK(pair_map_get(&other, encode_pair(7, 1007), &count) && count == 5,
+              "partitioned lookup");
+        CHECK(pair_map_foreach(&other, count_entries, &visited) == 0 &&
+              visited == other.size && other.size == 300,
+              "partitioned foreach and size");
+        CHECK(pair_map_reserve(&other, 1000) != 0,
+              "partitioned map rejects whole-table rehash");
+        pair_map_free(&other);
+    }
+
     /* 已存在键的计数溢出必须被拒绝且不能破坏原值。 */
     CHECK(pair_map_increment(&map, encode_pair(70, 71), UINT32_MAX) == 0,
           "insert max count");

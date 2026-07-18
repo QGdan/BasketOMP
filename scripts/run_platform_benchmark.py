@@ -46,7 +46,7 @@ INTEGER_KEYS = (
     "hardware_threads", "omp_max_threads", "unique_pairs", "pair_events",
     "graph_edge_entries", "max_degree", "active_users",
     "candidate_shortage_users", "empty_candidate_users", "total_candidates",
-    "max_candidates",
+    "max_candidates", "merge_buckets",
 )
 FLOAT_KEYS = (
     "load_ms", "cooccur_compute_ms", "merge_ms", "normalization_ms",
@@ -156,6 +156,7 @@ def run_program(args: argparse.Namespace, mode: str, threads: int,
         "--max-neighbors", str(args.max_neighbors),
         "--cooccur-schedule", args.cooccur_schedule,
         "--cooccur-chunk", str(args.cooccur_chunk),
+        "--merge-buckets", str(args.merge_buckets),
         "--recommend-schedule", args.recommend_schedule,
         "--recommend-chunk", str(args.recommend_chunk),
     ]
@@ -191,10 +192,12 @@ def make_record(args: argparse.Namespace, run_id: str, mode: str,
         "warmup": 0,
         "top_k": args.top_k,
         "max_neighbors": args.max_neighbors,
+        "merge_buckets": args.merge_buckets,
         "popular_fallback": 0,
         "schedule": "none" if mode == "serial" else args.cooccur_schedule,
         "cooccur_schedule": "none" if mode == "serial" else args.cooccur_schedule,
         "cooccur_chunk": args.cooccur_chunk,
+        "merge_strategy": required(values, "merge_strategy"),
         "recommend_schedule": "none" if mode == "serial" else args.recommend_schedule,
         "recommend_chunk": args.recommend_chunk,
         "proc_bind": args.proc_bind,
@@ -228,6 +231,7 @@ def update_experiment_index(output_root: Path, experiment_dir: Path,
         "profile": config["profile"],
         "threads": config["threads"],
         "max_neighbors": config["max_neighbors"],
+        "merge_buckets": config["merge_buckets"],
         "directory": str(experiment_dir.relative_to(output_root)),
         "platform": platform.platform(),
         "hostname": platform.node(),
@@ -269,7 +273,7 @@ def run_single_experiment(args: argparse.Namespace) -> Path:
     profile = ("fast-normalization-full" if args.max_neighbors == 0
                else f"fast-normalization-top{args.max_neighbors}")
     run_id = datetime.now().strftime("%Y%m%d-%H%M%S%f")[:-3]
-    run_id += f"-{args.dataset}-{profile}"
+    run_id += f"-{args.dataset}-{profile}-mb{args.merge_buckets if args.merge_buckets else 'auto'}"
     target = args.output_root / run_id
     target.mkdir(parents=True, exist_ok=False)
 
@@ -373,6 +377,7 @@ def run_single_experiment(args: argparse.Namespace) -> Path:
         "profile": profile,
         "threads": threads,
         "max_neighbors": args.max_neighbors,
+        "merge_buckets": args.merge_buckets,
     })
 
     return target
@@ -555,6 +560,8 @@ def main() -> int:
     parser.add_argument("--cooccur-schedule",
                         choices=("static", "dynamic", "guided"), default="dynamic")
     parser.add_argument("--cooccur-chunk", type=int, default=64)
+    parser.add_argument("--merge-buckets", type=int, default=0,
+                        help="0=auto; explicitly compare 128/256/384 buckets")
     parser.add_argument("--recommend-schedule",
                         choices=("static", "dynamic", "guided"), default="dynamic")
     parser.add_argument("--recommend-chunk", type=int, default=16)
@@ -581,7 +588,8 @@ def main() -> int:
     # ── 参数校验 ──────────────────────────
     if args.max_threads < 1 or args.repeats < 1 or args.serial_repeats < 1:
         parser.error("线程数和重复次数必须为正")
-    if args.warmups < 0 or args.top_k < 1 or args.max_neighbors < 0:
+    if (args.warmups < 0 or args.top_k < 1 or args.max_neighbors < 0 or
+            args.merge_buckets < 0 or args.merge_buckets > 4096):
         parser.error("无效的预热/top-k/max-neighbors 值")
 
     # ── 自动配置模式 ──────────────────────

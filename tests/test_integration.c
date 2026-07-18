@@ -53,9 +53,12 @@ int main(int argc, char **argv)
     CHECK(recommendation_results_equal(&limited_serial, &limited_parallel,
                                        1e-12),
           "limited graph serial/OpenMP mismatch");
-    CHECK(build_cooccur_openmp(&dataset, 2, OMP_SCHEDULE_DYNAMIC, 0,
+    CHECK(build_cooccur_openmp(&dataset, 2, OMP_SCHEDULE_DYNAMIC, 0, 0,
                                &model, error, sizeof(error)) != 0,
           "zero cooccurrence chunk must fail");
+    CHECK(build_cooccur_openmp(&dataset, 2, OMP_SCHEDULE_DYNAMIC, 4, 4097,
+                               &model, error, sizeof(error)) != 0,
+          "excessive merge bucket count must fail");
 
     printf("PASS: optimization integration %s full=%llu limited=%llu\n",
            path, (unsigned long long)full.edge_entry_count,

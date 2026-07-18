@@ -20,6 +20,7 @@ typedef struct {
     uint64_t total_pair_events;
     double compute_seconds;
     double merge_seconds;
+    uint32_t merge_bucket_count;
 } CooccurResult;
 
 int build_cooccur_serial(const Dataset *dataset, CooccurResult *result,
@@ -27,7 +28,7 @@ int build_cooccur_serial(const Dataset *dataset, CooccurResult *result,
 
 int build_cooccur_openmp(const Dataset *dataset, int threads,
                          OmpSchedule schedule, int chunk,
-                         CooccurResult *result,
+                         int merge_buckets, CooccurResult *result,
                          char *error, size_t error_capacity);
 
 void cooccur_result_free(CooccurResult *result);

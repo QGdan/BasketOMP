@@ -26,6 +26,7 @@ typedef struct {
     uint32_t sample_users;
     OmpSchedule cooccur_schedule;
     int cooccur_chunk;
+    int merge_buckets;
     OmpSchedule recommend_schedule;
     int recommend_chunk;
 } Options;
@@ -36,6 +37,7 @@ static void print_usage(const char *program)
             "usage: %s [--data DIR] [--mode serial|openmp] "
             "[--threads N] [--top-k K] [--max-neighbors N] "
             "[--cooccur-schedule static|dynamic|guided] [--cooccur-chunk N] "
+            "[--merge-buckets N] "
             "[--recommend-schedule static|dynamic|guided] [--recommend-chunk N] "
             "[--samples N] [--output FILE]\n",
             program);
@@ -99,6 +101,7 @@ static int parse_options(int argc, char **argv, Options *options)
     options->sample_users = 0;
     options->cooccur_schedule = OMP_SCHEDULE_DYNAMIC;
     options->cooccur_chunk = 64;
+    options->merge_buckets = 0; /* 0=auto; 48 threads resolve to 256 buckets. */
     options->recommend_schedule = OMP_SCHEDULE_DYNAMIC;
     options->recommend_chunk = 16;
 
@@ -146,6 +149,13 @@ static int parse_options(int argc, char **argv, Options *options)
             if (parse_positive_int(argv[++i], &options->cooccur_chunk) != 0) {
                 return -1;
             }
+        } else if (strcmp(argv[i], "--merge-buckets") == 0 && i + 1 < argc) {
+            uint32_t value;
+            if (parse_nonnegative_u32(argv[++i], &value) != 0 ||
+                value > INT_MAX) {
+                return -1;
+            }
+            options->merge_buckets = (int)value;
         } else if (strcmp(argv[i], "--recommend-schedule") == 0 &&
                    i + 1 < argc) {
             if (parse_schedule(argv[++i], &options->recommend_schedule) != 0) {
@@ -202,6 +212,7 @@ int main(int argc, char **argv)
     } else if (build_cooccur_openmp(&dataset, options.threads,
                                     options.cooccur_schedule,
                                     options.cooccur_chunk,
+                                    options.merge_buckets,
                                     &model, error, sizeof(error)) != 0) {
         fprintf(stderr, "OpenMP cooccurrence failed: %s\n", error);
         goto cleanup;
@@ -260,6 +271,11 @@ int main(int argc, char **argv)
     printf("schedule=%s\n", schedule_name(options.cooccur_schedule));
     printf("cooccur_schedule=%s\n", schedule_name(options.cooccur_schedule));
     printf("cooccur_chunk=%d\n", options.cooccur_chunk);
+    printf("merge_strategy=%s\n",
+           options.mode == MODE_SERIAL ? "serial" :
+           model.merge_bucket_count == 1 ? "bucket-serial" :
+           "bucket-parallel");
+    printf("merge_buckets=%u\n", model.merge_bucket_count);
     printf("recommend_schedule=%s\n", schedule_name(options.recommend_schedule));
     printf("recommend_chunk=%d\n", options.recommend_chunk);
     printf("top_k=%u\n", options.k);

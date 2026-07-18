@@ -1,4 +1,4 @@
-# 第二阶段算法优化结果
+﻿# 第二阶段算法优化结果
 
 ## 1. 最终结论
 
@@ -149,3 +149,17 @@ python .\scripts\summarize_results.py $raw
 - Top-N 比较：`results/experiments/20260717-medium-topn-comparison/`
 - large Top-20 质量复核：`results/experiments/20260717-204922-large-fast-normalization-top20/`
 - 最终 Top-50 large：`results/experiments/20260717-205106-large-fast-normalization-top50/`
+
+## 11. 分桶并行归并（O8）
+
+2026-07-18 根据学校平台 large 1–48 线程结果实现分桶并行归并。每个线程在共现热点循环中写私有分桶哈希表；归并阶段每个 OpenMP 任务独占目标表的一个连续桶区间，不使用锁、`critical` 或原子更新。新增 `--merge-buckets N`，0 表示自动选择，48 线程默认 256 桶。
+
+完整 toy/small 回归通过，自动、7、64 桶在 1/2/4 线程和三种调度下均与串行逐项一致。当前开发机 medium Top-50、8 线程三次诊断中位数如下：
+
+| 桶数 | cooccur_compute_ms | merge_ms | algorithm_ms |
+| ---: | ---: | ---: | ---: |
+| 1 | 67 | 189 | 397 |
+| 64 | 79 | 27 | 242 |
+| 256 | 82 | 25 | 243 |
+
+64 桶归并约比 1 桶快 7.0 倍，总算法时间改善约 39.0%；256 桶归并略快，但总算法时间与64桶基本相同。审效还修复了“低位选桶、低位选槽”导致的探测聚集，最终采用高位选桶、低位选槽。该数据是本地诊断，不替代学校平台 large 正式结果。下一轮应固定 24/32/48 线程比较 128/256/384 桶，并以 `algorithm_ms` 中位数而非单独 `merge_ms` 选择配置。详见 `docs/bucketed-parallel-merge.md`。

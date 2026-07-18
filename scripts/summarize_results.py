@@ -38,13 +38,15 @@ def main() -> int:
             row.get("max_neighbors", "0"),
             row.get("cooccur_schedule", row.get("schedule", "none")),
             row.get("cooccur_chunk", "0"),
+            row.get("merge_strategy", "legacy"),
+            row.get("merge_buckets", "0"),
             row.get("recommend_schedule", "none"),
             row.get("recommend_chunk", "0"),
         )
         groups[key].append(row)
 
     serial_medians: dict[tuple[str, str, str, str], dict[str, float]] = {}
-    openmp1_medians: dict[tuple[str, str, str, str], dict[str, float]] = {}
+    openmp1_medians: dict[tuple[str, str, str, str, str, str], dict[str, float]] = {}
     for key, group in groups.items():
         dataset, profile, mode, threads, top_k, max_neighbors, *_ = key
         medians = {
@@ -54,13 +56,15 @@ def main() -> int:
         if mode == "serial":
             serial_medians[(dataset, profile, top_k, max_neighbors)] = medians
         elif mode == "openmp" and int(threads) == 1:
-            openmp1_medians[(dataset, profile, top_k, max_neighbors)] = medians
+            merge_strategy, merge_buckets = key[8], key[9]
+            openmp1_medians[(dataset, profile, top_k, max_neighbors,
+                             merge_strategy, merge_buckets)] = medians
 
     output_rows: list[dict[str, object]] = []
     for key in sorted(groups):
         (dataset, profile, mode, threads_text, top_k, max_neighbors,
-         cooccur_schedule, cooccur_chunk, recommend_schedule,
-         recommend_chunk) = key
+         cooccur_schedule, cooccur_chunk, merge_strategy, merge_buckets,
+         recommend_schedule, recommend_chunk) = key
         group = groups[key]
         threads = int(threads_text)
         summary: dict[str, object] = {
@@ -73,6 +77,8 @@ def main() -> int:
             "max_neighbors": max_neighbors,
             "cooccur_schedule": cooccur_schedule,
             "cooccur_chunk": cooccur_chunk,
+            "merge_strategy": merge_strategy,
+            "merge_buckets": merge_buckets,
             "recommend_schedule": recommend_schedule,
             "recommend_chunk": recommend_chunk,
             "runs": len(group),
@@ -83,6 +89,20 @@ def main() -> int:
             summary[f"min_{field}"] = min(values)
             summary[f"max_{field}"] = max(values)
             summary[f"stdev_{field}"] = statistics.stdev(values) if len(values) > 1 else 0.0
+        pipeline_values = [
+            float(row.get("cooccur_compute_ms", 0.0)) +
+            float(row.get("merge_ms", 0.0)) for row in group
+        ]
+        summary["median_cooccur_pipeline_ms"] = statistics.median(pipeline_values)
+        algorithm_median = float(summary["median_algorithm_ms"])
+        summary["merge_fraction"] = (
+            float(summary["median_merge_ms"]) / algorithm_median
+            if algorithm_median > 0 else 0.0
+        )
+        summary["cooccur_pipeline_fraction"] = (
+            float(summary["median_cooccur_pipeline_ms"]) / algorithm_median
+            if algorithm_median > 0 else 0.0
+        )
         serial_key = (dataset, profile, top_k, max_neighbors)
         if serial_key not in serial_medians:
             raise ValueError(f"missing matching serial baseline for {serial_key}")
@@ -101,7 +121,14 @@ def main() -> int:
             summary[f"{stage[:-3]}_speedup_vs_serial"] = (
                 serial_stats[stage] / current if current > 0 else 0.0
             )
-        openmp1 = openmp1_medians.get(serial_key)
+        serial_pipeline = serial_stats["cooccur_compute_ms"] + serial_stats["merge_ms"]
+        current_pipeline = float(summary["median_cooccur_pipeline_ms"])
+        summary["cooccur_pipeline_speedup_vs_serial"] = (
+            serial_pipeline / current_pipeline if current_pipeline > 0 else 0.0
+        )
+        openmp1_key = (dataset, profile, top_k, max_neighbors,
+                       merge_strategy, merge_buckets)
+        openmp1 = openmp1_medians.get(openmp1_key)
         if mode == "openmp" and openmp1 is not None:
             openmp1_speedup = (
                 openmp1["algorithm_ms"] / algorithm_time

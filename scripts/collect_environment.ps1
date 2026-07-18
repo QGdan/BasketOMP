@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory=$true)][string]$OutputPath,
     [Parameter(Mandatory=$true)][string]$RunId,
     [Parameter(Mandatory=$true)][string]$Dataset,
@@ -11,6 +11,7 @@ param(
     [int]$MaxNeighbors,
     [string]$CooccurSchedule,
     [int]$CooccurChunk,
+    [int]$MergeBuckets,
     [string]$RecommendSchedule,
     [int]$RecommendChunk
 )
@@ -63,6 +64,7 @@ $manifest = [ordered]@{
         max_neighbors = $MaxNeighbors
         cooccur_schedule = $CooccurSchedule
         cooccur_chunk = $CooccurChunk
+        merge_buckets = $MergeBuckets
         recommend_schedule = $RecommendSchedule
         recommend_chunk = $RecommendChunk
     }

@@ -14,6 +14,7 @@ REQUIRED_FIELDS = (
     "run_id", "timestamp", "dataset", "algorithm_profile", "mode",
     "threads", "repeat", "warmup", "top_k", "max_neighbors",
     "popular_fallback", "cooccur_schedule", "cooccur_chunk",
+    "merge_strategy", "merge_buckets",
     "recommend_schedule", "recommend_chunk", "orders", "prior_rows",
     "train_rows", "products", "users", "hardware_threads",
     "omp_max_threads", "unique_pairs", "pair_events",
@@ -29,7 +30,8 @@ REQUIRED_FIELDS = (
 
 INTEGER_FIELDS = (
     "threads", "repeat", "warmup", "top_k", "max_neighbors",
-    "popular_fallback", "cooccur_chunk", "recommend_chunk", "orders",
+    "popular_fallback", "cooccur_chunk", "merge_buckets",
+    "recommend_chunk", "orders",
     "prior_rows", "train_rows", "products", "users", "hardware_threads",
     "omp_max_threads", "unique_pairs",
     "pair_events", "graph_edge_entries", "max_degree", "active_users",
@@ -48,6 +50,9 @@ def validate_rows(rows: list[dict[str, str]]) -> list[str]:
     errors: list[str] = []
     if not rows:
         return ["benchmark CSV is empty"]
+    for row in rows:
+        row.setdefault("merge_strategy", "legacy")
+        row.setdefault("merge_buckets", "0")
     missing = [field for field in REQUIRED_FIELDS if field not in rows[0]]
     if missing:
         return [f"missing required fields: {', '.join(missing)}"]
@@ -74,8 +79,30 @@ def validate_rows(rows: list[dict[str, str]]) -> list[str]:
             errors.append(f"line {index}: status is not ok")
         if item["threads"] < 1 or item["repeat"] < 1 or item["top_k"] < 1:
             errors.append(f"line {index}: threads/repeat/top_k must be positive")
-        if item["max_neighbors"] < 0 or item["warmup"] < 0:
-            errors.append(f"line {index}: max_neighbors/warmup cannot be negative")
+        if (item["max_neighbors"] < 0 or item["warmup"] < 0 or
+                item["merge_buckets"] < 0):
+            errors.append(
+                f"line {index}: max_neighbors/warmup/merge_buckets cannot be negative"
+            )
+        mode = str(item["mode"])
+        strategy = str(item["merge_strategy"])
+        buckets = int(item["merge_buckets"])
+        if buckets > 4096:
+            errors.append(f"line {index}: merge_buckets exceeds 4096")
+        if strategy != "legacy":
+            if mode == "serial" and (strategy != "serial" or buckets != 0):
+                errors.append(
+                    f"line {index}: serial mode requires merge_strategy=serial "
+                    "and merge_buckets=0"
+                )
+            elif mode == "openmp":
+                valid = ((strategy == "bucket-serial" and buckets == 1) or
+                         (strategy == "bucket-parallel" and buckets > 1))
+                if not valid:
+                    errors.append(
+                        f"line {index}: inconsistent OpenMP merge metadata "
+                        f"({strategy}, {buckets})"
+                    )
         for field in TIMING_FIELDS:
             value = item[field]
             if not math.isfinite(value) or value < 0:
@@ -119,7 +146,8 @@ def validate_rows(rows: list[dict[str, str]]) -> list[str]:
             item["run_id"], item["dataset"], item["algorithm_profile"],
             item["mode"], item["threads"], item["top_k"],
             item["max_neighbors"], item["cooccur_schedule"],
-            item["cooccur_chunk"], item["recommend_schedule"],
+            item["cooccur_chunk"], item["merge_strategy"],
+            item["merge_buckets"], item["recommend_schedule"],
             item["recommend_chunk"],
         )
         repeat = int(item["repeat"])
@@ -145,7 +173,8 @@ def self_test() -> int:
     base.update({
         "run_id": "self-test", "timestamp": "2026-01-01T00:00:00",
         "dataset": "toy", "algorithm_profile": "test", "mode": "serial",
-        "cooccur_schedule": "none", "recommend_schedule": "none",
+        "cooccur_schedule": "none", "merge_strategy": "serial",
+        "merge_buckets": "0", "recommend_schedule": "none",
         "status": "ok", "max_neighbors": "0", "warmup": "0",
         "unique_pairs": "3", "graph_edge_entries": "6", "users": "4",
         "active_users": "2", "empty_candidate_users": "2",
@@ -168,6 +197,14 @@ def self_test() -> int:
     bad_metric = base.copy(); bad_metric["recall"] = "1.5"; cases.append([bad_metric])
     bad_edges = base.copy(); bad_edges["graph_edge_entries"] = "5"; cases.append([bad_edges])
     duplicate = [base.copy(), base.copy()]; cases.append(duplicate)
+    bad_merge = base.copy(); bad_merge.update({
+        "mode": "openmp", "merge_strategy": "bucket-parallel",
+        "merge_buckets": "1",
+    }); cases.append([bad_merge])
+    too_many_buckets = base.copy(); too_many_buckets.update({
+        "mode": "openmp", "merge_strategy": "bucket-parallel",
+        "merge_buckets": "4097",
+    }); cases.append([too_many_buckets])
     for number, rows in enumerate(cases, start=1):
         if not validate_rows(rows):
             print(f"self-test invalid case {number} was accepted", file=sys.stderr)
