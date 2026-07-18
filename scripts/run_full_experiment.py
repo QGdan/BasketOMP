@@ -95,6 +95,8 @@ def main() -> int:
                         help="快速模式: repeats=3, 跳过 Full 图 large 实验")
     parser.add_argument("--skip-large", action="store_true",
                         help="跳过 large 数据集实验")
+    parser.add_argument("--skip-full", action="store_true",
+                        help="跳过 Full 图实验（仅跑 Top-50）")
     parser.add_argument("--skip-build", action="store_true",
                         help="跳过编译步骤（假设已编译）")
     parser.add_argument("--output-root", default="results/experiments",
@@ -192,10 +194,13 @@ def main() -> int:
     ]
 
     if args.quick:
-        # quick 模式: 只跑 small+medium Top-50，跳过 Full 图和 large
         experiments = [
+            ("small",   0,  "small-full",    args.skip_full),
             ("small",   50, "small-top50",   False),
+            ("medium",  0,  "medium-full",   args.skip_full),
             ("medium",  50, "medium-top50",  False),
+            ("large",   0,  "large-full",    args.skip_large or args.skip_full),
+            ("large",   50, "large-top50",   args.skip_large),
         ]
 
     output_root = project_root / args.output_root
